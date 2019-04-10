@@ -1,0 +1,6 @@
+[route]
+path = "/query"
+method = "POST"
+upstream_url = "https://api.caric.io/query"
+body_limit_per_resp = "10MB"
+

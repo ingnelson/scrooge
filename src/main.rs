@@ -3,12 +3,14 @@ extern crate log;
 
 use hyper::{Body, Request, Response, Server, Client, Uri, StatusCode};
 use hyper::header::{HeaderMap, HeaderValue};
+use futures::prelude::*;
 use futures::future::{self, Future};
 use hyper::server::conn::AddrStream;
 use hyper::service::make_service_fn;
 use hyper::service::service_fn;
 use std::net::IpAddr;
 use std::str::FromStr;
+use std::str;
 use lazy_static::lazy_static;
 
 type BoxFut = Box<Future<Item=Response<Body>, Error=hyper::Error> + Send>;
@@ -29,6 +31,7 @@ fn is_hop_header(name: &str) -> bool {
             Ascii::new("Trailers"),
             Ascii::new("Transfer-Encoding"),
             Ascii::new("Upgrade"),
+            Ascii::new("Content-Length"),
         ];
     }
 
@@ -48,9 +51,29 @@ fn remove_hop_headers(headers: &HeaderMap<HeaderValue>) -> HeaderMap<HeaderValue
     result
 }
 
-fn create_proxied_response<B>(mut response: Response<B>) -> Response<B> {
-    *response.headers_mut() = remove_hop_headers(response.headers());
-    response
+fn create_proxied_response(original_resp: Response<Body>) -> BoxFut {
+    // We transform the response from upstream in a chunked response
+    let mut chunked_response = Response::builder();
+
+    for (k, v) in remove_hop_headers(original_resp.headers()).iter() {
+        chunked_response.header(k, v);
+    }
+
+    // just to make sure we are going throgh this service
+    chunked_response.header("x-proxy-by", "scrooge");
+
+    Box::new(original_resp.into_body()
+        .concat2()
+        .from_err()
+        .and_then(move |entire_body| {
+
+            let chunks = entire_body.into_bytes().chunks(50).map(|part| {
+                String::from_utf8(part.to_vec()).unwrap()
+            }).collect::<Vec<_>>();
+
+            let stream = futures::stream::iter_ok::<_, ::std::io::Error>(chunks);
+            Ok(chunked_response.body(Body::wrap_stream(stream)).unwrap())
+    }))
 }
 
 fn forward_uri<B>(forward_url: &str, req: &Request<B>) -> Uri {
@@ -62,7 +85,7 @@ fn forward_uri<B>(forward_url: &str, req: &Request<B>) -> Uri {
     Uri::from_str(forward_uri.as_str()).unwrap()
 }
 
-fn create_proxied_request<B>(client_ip: IpAddr, forward_url: &str, mut request: Request<B>) -> Request<B> {
+fn create_proxied_request(client_ip: IpAddr, forward_url: &str, mut request: Request<Body>) -> Request<Body> {
     *request.headers_mut() = remove_hop_headers(request.headers());
     *request.uri_mut() = forward_uri(forward_url, &request);
 
@@ -103,15 +126,14 @@ pub fn proxy_call(client_ip: IpAddr, forward_uri: &str, request: Request<Body>) 
             Ok(response) => create_proxied_response(response),
             Err(error) => {
                 println!("Error: {}", error); // TODO: Configurable logging
-                Response::builder()
+                Box::new(future::ok(Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .body(Body::empty())
-                    .unwrap()
+                    .unwrap()))
             },
         };
 
-
-        future::ok(proxied_response)
+        proxied_response
 	});
 
 	Box::new(response)

@@ -9,29 +9,23 @@ use futures::future::{self, Future};
 use futures::prelude::*;
 use hyper::header::{HeaderMap, HeaderValue};
 use hyper::{Body, Client, Request, Response, StatusCode, Uri};
+use human_size::{SpecificSize, Byte};
 use lazy_static::lazy_static;
 
 type BoxFut = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Config {
     upstream_url: String,
-    max_chunk_size: usize,
+    max_chunk_size: SpecificSize<Byte>,
 }
 
 impl Config {
-    pub fn new() -> Self {
-        Config::default()
-    }
-
-    pub fn with_upstream(mut self, upstream_url: String) -> Self {
-        self.upstream_url = upstream_url;
-        self
-    }
-
-    pub fn with_max_chunk_size(mut self, size: usize) -> Self {
-        self.max_chunk_size = size;
-        self
+    pub fn new(upstream_url: String, max_chunk_size: SpecificSize<Byte>) -> Self {
+        Config{
+            upstream_url,
+            max_chunk_size
+        }
     }
 }
 
@@ -145,7 +139,7 @@ fn create_proxied_request(
 pub fn proxy_call(config: &Config, client_ip: IpAddr, request: Request<Body>) -> BoxFut {
     let proxied_request = create_proxied_request(&config.upstream_url, client_ip, request);
 
-    let max_chunk_size = config.max_chunk_size;
+    let max_chunk_size = config.max_chunk_size.value() as usize;
 
     info!(
         "Processing request ClientIP({}) -> {}",

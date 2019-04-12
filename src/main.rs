@@ -6,6 +6,7 @@ use hyper::server::conn::AddrStream;
 use hyper::service::make_service_fn;
 use hyper::service::service_fn;
 use hyper::{Body, Request, Server};
+use human_size::{SpecificSize, Byte};
 
 use scrooge;
 use scrooge::Config;
@@ -14,9 +15,11 @@ fn main() {
     pretty_env_logger::init();
 
     let addr = ([127, 0, 0, 1], 8080).into();
+
+    let size: SpecificSize<Byte> = "64B".parse().unwrap();
     let config = Config::new()
         .with_upstream(String::from("http://127.0.0.1:8888"))
-        .with_max_chunk_size(124);
+        .with_max_chunk_size(size.value() as usize);
 
     let proxy_service = make_service_fn(move |socket: &AddrStream| {
         // called every time a new socket connection is accepted!

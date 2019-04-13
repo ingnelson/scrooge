@@ -1,6 +1,2 @@
-[route]
-path = "/query"
-method = "POST"
-upstream_url = "https://api.caric.io/query"
-body_limit_per_resp = "10MB"
-
+upstream_url = "http://localhost:8888"
+utf8_body_limit = "1MB"

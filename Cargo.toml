@@ -1,6 +1,8 @@
 [package]
 name = "scrooge"
 version = "0.1.0"
+description = "A server that proxy HTTP requests and stream the responses in chunks of a specific size."
+license = "MIT"
 authors = ["Rafael Caricio <foss@caric.io>"]
 edition = "2018"
 exclude = ["config.toml"]

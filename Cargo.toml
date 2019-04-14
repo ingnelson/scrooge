@@ -3,6 +3,7 @@ name = "scrooge"
 version = "0.1.0"
 authors = ["Rafael Caricio <foss@caric.io>"]
 edition = "2018"
+exclude = ["config.toml"]
 
 [dependencies]
 hyper = "0.12"

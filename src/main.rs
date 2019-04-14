@@ -9,8 +9,7 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Server,
 };
-use scrooge::{config::ProxyConfig, proxy_call, Client};
-use std::sync::Arc;
+use scrooge::{config::ProxyConfig, proxy_call };
 use std::collections::HashMap;
 use std::process;
 
@@ -39,15 +38,17 @@ fn main() {
 
     let proxy_service = make_service_fn(move |socket: &AddrStream| {
         // every time a new socket connection is accepted!
-        let client = Arc::new(Client::new(
-            config.upstream_url(),
-            max_chunk_size,
-            socket.remote_addr().ip(),
-        ));
+        let client_ip = socket.remote_addr().ip();
+        let upstream_url = config.upstream_url();
 
         service_fn(move |req: Request<Body>| {
             // called after incoming socket connection was processed and loaded in high level structures
-            proxy_call(client.clone(), req)
+            proxy_call(
+                upstream_url.clone(),
+                max_chunk_size,
+                client_ip,
+                req
+            )
         })
     });
 

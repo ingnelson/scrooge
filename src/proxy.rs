@@ -16,32 +16,15 @@ use unicase::Ascii;
 
 type BoxFut = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
-#[derive(Clone)]
-pub struct Client {
-    forward_to: Arc<String>,
-    max_chunk_size: usize,
-    ip: IpAddr,
-}
 
-impl Client {
-    pub fn new(forward_to: Arc<String>, max_chunk_size: usize, ip: IpAddr) -> Self {
-        Self {
-            forward_to,
-            max_chunk_size,
-            ip,
-        }
-    }
-}
-
-pub fn proxy_call(client: Arc<Client>, request: Request<Body>) -> BoxFut {
-    let proxied_request = create_proxied_request(&client.forward_to, client.ip, request);
+pub fn proxy_call(forward_to: Arc<String>, max_chunk_size: usize, client_ip: IpAddr, request: Request<Body>) -> BoxFut {
+    let proxied_request = create_proxied_request(&forward_to, client_ip, request);
 
     info!(
         "Processing request ClientIP({}) -> {}",
-        client.ip, client.forward_to
+        client_ip, forward_to
     );
 
-    let max_chunk_size = client.max_chunk_size;
     let client = HyperClient::new();
     let response = client.request(proxied_request).then(move |response| {
         match response {

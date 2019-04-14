@@ -11,7 +11,6 @@ use hyper::{
 };
 use scrooge::{config::ProxyConfig, proxy_call, Client};
 use std::sync::Arc;
-use std::collections::HashMap;
 use std::process;
 
 fn main() {
@@ -21,12 +20,7 @@ fn main() {
     let config = {
         let mut settings = config::Config::default();
         settings.merge(config::File::with_name("config")).unwrap();
-        let settings = settings.try_into::<HashMap<String, String>>().unwrap();
-
-        ProxyConfig::new(
-            settings.get(&String::from("upstream_url")).unwrap().to_string(),
-            settings.get(&String::from("utf8_body_limit")).unwrap().to_string()
-        )
+        settings.try_into::<ProxyConfig>().unwrap()
     };
 
     let max_chunk_size = match config.max_chunk_size_in_bytes() {
@@ -37,10 +31,12 @@ fn main() {
         }
     };
 
+    let upstream_url = Arc::new(config.upstream_url().clone());
+
     let proxy_service = make_service_fn(move |socket: &AddrStream| {
         // every time a new socket connection is accepted!
         let client = Arc::new(Client::new(
-            config.upstream_url(),
+            upstream_url.clone(),
             max_chunk_size,
             socket.remote_addr().ip(),
         ));

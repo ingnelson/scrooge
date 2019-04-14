@@ -1,23 +1,23 @@
 use human_size::{Byte, SpecificSize, ParsingError};
-use std::{ fmt, error::Error, sync::Arc };
+use serde::Deserialize;
+use std::{ fmt, error::Error };
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct ProxyConfig {
-    upstream_url: Arc<String>,
+    upstream_url: String,
     utf8_body_limit: String,
 }
 
 impl ProxyConfig {
     pub fn new(upstream_url: String, utf8_body_limit: String) -> Self {
-        let upstream_url = Arc::new(upstream_url);
         Self {
             upstream_url,
             utf8_body_limit,
         }
     }
 
-    pub fn upstream_url(&self) -> Arc<String> {
-        self.upstream_url.clone()
+    pub fn upstream_url(&self) -> &String {
+        &self.upstream_url
     }
 
     pub fn max_chunk_size_in_bytes(&self) -> Result<usize, ScroogeError> {

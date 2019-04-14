@@ -7,11 +7,7 @@ use hyper::{
     Body, Client as HyperClient, Request, Server,
 };
 use scrooge::{config::ProxyConfig, proxy_call, Client};
-use std::{
-    process,
-    sync::Arc,
-    path::PathBuf
-};
+use std::{path::PathBuf, process, sync::Arc};
 use structopt::StructOpt;
 
 /// Proxy HTTP requests and stream the responses in chunks of a specific size.
@@ -27,7 +23,7 @@ struct Arguments {
 
     /// Configuration file
     #[structopt(name = "CONFIG", parse(from_os_str))]
-    config_path: PathBuf
+    config_path: PathBuf,
 }
 
 fn main() {
@@ -35,28 +31,30 @@ fn main() {
 
     let args = Arguments::from_args();
 
-    let config = {
-        let mut settings = config::Config::default();
-        match settings.merge(config::File::from(args.config_path)) {
-            Ok(_) => settings.try_into::<ProxyConfig>().unwrap(),
-            Err(why) => {
-                eprintln!("Error: {}", why);
-                process::exit(1);
-            }
-        }
-    };
-
-    let max_chunk_size = match config.max_chunk_size_in_bytes() {
-        Ok(v) => v,
-        Err(why) => {
+    let config = config::Config::default()
+        .merge(config::File::from(args.config_path))
+        .and_then(|v| v.clone().try_into::<ProxyConfig>())
+        .unwrap_or_else(|why| {
             eprintln!("Error: {}", why);
             process::exit(1);
-        }
-    };
+        });
 
-    let addr = format!("{}:{}", args.host, args.port).parse().unwrap();
+    let max_chunk_size = config.max_chunk_size_in_bytes().unwrap_or_else(|why| {
+        eprintln!("Error: {}", why);
+        process::exit(1);
+    });
 
-    println!("Server running at http://{}:{} chunking responses at {}", args.host, args.port, config.utf8_body_limit);
+    let addr = format!("{}:{}", args.host, args.port)
+        .parse()
+        .unwrap_or_else(|why| {
+            eprintln!("Error: {}", why);
+            process::exit(1);
+        });
+
+    println!(
+        "Server running at http://{}:{} chunking responses at {}",
+        args.host, args.port, config.utf8_body_limit
+    );
 
     let upstream_url = Arc::new(config.upstream_url.clone());
     let http_client = Arc::new(HyperClient::builder().keep_alive(true).build_http::<Body>());

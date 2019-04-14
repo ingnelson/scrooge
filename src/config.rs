@@ -16,8 +16,8 @@ impl ProxyConfig {
         }
     }
 
-    pub fn upstream_url(&self) -> String {
-        self.upstream_url.to_string()
+    pub fn upstream_url(&self) -> &String {
+        &self.upstream_url
     }
 
     pub fn max_chunk_size_in_bytes(&self) -> Result<usize, Box<dyn Error>> {

@@ -7,6 +7,7 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Server,
 };
+use lazy_static::lazy_static;
 use scrooge::{config::ProxyConfig, proxy_call, Client};
 use std::process;
 
@@ -14,8 +15,12 @@ fn main() {
     pretty_env_logger::init();
 
     let addr = ([127, 0, 0, 1], 8080).into();
-    let config = ProxyConfig::new(String::from("http://127.0.0.1:8888"), String::from("64B"));
-    let max_chunk_size = match config.max_chunk_size_in_bytes() {
+
+    lazy_static! {
+        static ref CONFIG: ProxyConfig = ProxyConfig::new(String::from("http://127.0.0.1:8888"), String::from("64KB"));
+    }
+
+    let max_chunk_size = match CONFIG.max_chunk_size_in_bytes() {
         Ok(v) => v,
         Err(why) => {
             eprintln!("Error: {}", why);
@@ -26,7 +31,7 @@ fn main() {
     let proxy_service = make_service_fn(move |socket: &AddrStream| {
         // every time a new socket connection is accepted!
         let client = Client::new(
-            config.upstream_url(),
+            CONFIG.upstream_url(),
             max_chunk_size,
             socket.remote_addr().ip(),
         );

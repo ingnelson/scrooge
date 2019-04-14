@@ -7,6 +7,7 @@ use hyper::{
     Body, Client as HyperClient, Request, Response, StatusCode, Uri,
 };
 use lazy_static::lazy_static;
+use unicase::Ascii;
 use std::{
     net::IpAddr,
     str::{self, FromStr},
@@ -14,80 +15,49 @@ use std::{
 
 type BoxFut = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
-fn is_hop_header(name: &str) -> bool {
-    use unicase::Ascii;
-
-    // A list of the headers, using `unicase` to help us compare without
-    // worrying about the case, and `lazy_static!` to prevent reallocation
-    // of the vector.
-    lazy_static! {
-        static ref HOP_HEADERS: Vec<Ascii<&'static str>> = vec![
-            Ascii::new("Connection"),
-            Ascii::new("Keep-Alive"),
-            Ascii::new("Proxy-Authenticate"),
-            Ascii::new("Proxy-Authorization"),
-            Ascii::new("Te"),
-            Ascii::new("Trailers"),
-            Ascii::new("Transfer-Encoding"),
-            Ascii::new("Upgrade"),
-
-            // We remove this header since we want to send content chunked
-            Ascii::new("Content-Length"),
-        ];
-    }
-
-    HOP_HEADERS.iter().any(|h| h == &name)
+#[derive(Clone)]
+pub struct Client<'a> {
+    forward_to: &'a String,
+    max_chunk_size: usize,
+    ip: IpAddr,
 }
 
-/// Returns a clone of the headers without the [hop-by-hop headers].
-///
-/// [hop-by-hop headers]: http://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html
-fn remove_hop_headers(headers: &HeaderMap<HeaderValue>) -> HeaderMap<HeaderValue> {
-    let mut result = HeaderMap::new();
-    for (k, v) in headers.iter() {
-        if !is_hop_header(k.as_str()) {
-            result.insert(k.clone(), v.clone());
+impl<'a> Client<'a> {
+    pub fn new(forward_to: &'a String, max_chunk_size: usize, ip: IpAddr) -> Self {
+        Self {
+            forward_to,
+            max_chunk_size,
+            ip,
         }
     }
-    result
 }
 
-fn create_proxied_response(original_resp: Response<Body>, max_chunk_size: usize) -> BoxFut {
-    // We transform the response from upstream in a chunked response
-    let mut chunked_response = Response::builder();
+pub fn proxy_call(client: Client, request: Request<Body>) -> BoxFut {
+    let proxied_request = create_proxied_request(client.forward_to, client.ip, request);
 
-    for (k, v) in remove_hop_headers(original_resp.headers()).iter() {
-        chunked_response.header(k, v);
-    }
+    info!(
+        "Processing request ClientIP({}) -> {}",
+        client.ip, client.forward_to
+    );
 
-    // just to make sure we are going throgh this service
-    chunked_response.header("x-proxy-by", "scrooge");
+    let max_chunk_size = client.max_chunk_size;
+    let client = HyperClient::new();
+    let response = client.request(proxied_request).then(move |response| {
+        match response {
+            Ok(response) => chunk_proxied_response(response, max_chunk_size),
+            Err(error) => {
+                println!("Error: {}", error); // TODO: Configurable logging
+                Box::new(future::ok(
+                    Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .body(Body::empty())
+                        .unwrap(),
+                ))
+            }
+        }
+    });
 
-    Box::new(
-        original_resp
-            .into_body()
-            .concat2()
-            .from_err()
-            .and_then(move |entire_body| {
-                let chunks = entire_body
-                    .into_bytes()
-                    .chunks(max_chunk_size)
-                    .map(|part| String::from_utf8(part.to_vec()).unwrap())
-                    .collect::<Vec<_>>();
-
-                let stream = futures::stream::iter_ok::<_, ::std::io::Error>(chunks);
-                Ok(chunked_response.body(Body::wrap_stream(stream)).unwrap())
-            }),
-    )
-}
-
-fn forward_uri<B>(forward_url: &str, req: &Request<B>) -> Uri {
-    let forward_uri = match req.uri().query() {
-        Some(query) => format!("{}{}?{}", forward_url, req.uri().path(), query),
-        None => format!("{}{}", forward_url, req.uri().path()),
-    };
-
-    Uri::from_str(forward_uri.as_str()).unwrap()
+    Box::new(response)
 }
 
 fn create_proxied_request(
@@ -121,47 +91,74 @@ fn create_proxied_request(
     request
 }
 
-#[derive(Clone)]
-pub struct Client {
-    forward_to: String,
-    max_chunk_size: usize,
-    ip: IpAddr,
-}
-
-impl Client {
-    pub fn new(forward_to: String, max_chunk_size: usize, ip: IpAddr) -> Self {
-        Self {
-            forward_to,
-            max_chunk_size,
-            ip,
+/// Returns a clone of the headers without the [hop-by-hop headers].
+///
+/// [hop-by-hop headers]: http://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html
+fn remove_hop_headers(headers: &HeaderMap<HeaderValue>) -> HeaderMap<HeaderValue> {
+    let mut result = HeaderMap::new();
+    for (k, v) in headers.iter() {
+        if !is_hop_header(k.as_str()) {
+            result.insert(k.clone(), v.clone());
         }
     }
+    result
 }
 
-pub fn proxy_call(client: Client, request: Request<Body>) -> BoxFut {
-    let proxied_request = create_proxied_request(&client.forward_to, client.ip, request);
+fn is_hop_header(name: &str) -> bool {
+    // A list of the headers, using `unicase` to help us compare without
+    // worrying about the case, and `lazy_static!` to prevent reallocation
+    // of the vector.
+    lazy_static! {
+        static ref HOP_HEADERS: Vec<Ascii<&'static str>> = vec![
+            Ascii::new("Connection"),
+            Ascii::new("Keep-Alive"),
+            Ascii::new("Proxy-Authenticate"),
+            Ascii::new("Proxy-Authorization"),
+            Ascii::new("Te"),
+            Ascii::new("Trailers"),
+            Ascii::new("Transfer-Encoding"),
+            Ascii::new("Upgrade")
+        ];
+    }
 
-    info!(
-        "Processing request ClientIP({}) -> {}",
-        client.ip, client.forward_to
-    );
+    HOP_HEADERS.iter().any(|h| h == &name)
+}
 
-    let max_chunk_size = client.max_chunk_size;
-    let client = HyperClient::new();
-    let response = client.request(proxied_request).then(move |response| {
-        match response {
-            Ok(response) => create_proxied_response(response, max_chunk_size),
-            Err(error) => {
-                println!("Error: {}", error); // TODO: Configurable logging
-                Box::new(future::ok(
-                    Response::builder()
-                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body(Body::empty())
-                        .unwrap(),
-                ))
-            }
-        }
-    });
+fn forward_uri<B>(forward_url: &str, req: &Request<B>) -> Uri {
+    let forward_uri = match req.uri().query() {
+        Some(query) => format!("{}{}?{}", forward_url, req.uri().path(), query),
+        None => format!("{}{}", forward_url, req.uri().path()),
+    };
 
-    Box::new(response)
+    Uri::from_str(forward_uri.as_str()).unwrap()
+}
+
+ /// Transforms the upstream response in a chunked response.
+fn chunk_proxied_response(original_resp: Response<Body>, max_chunk_size: usize) -> BoxFut {
+
+    lazy_static! {
+        static ref CONTENT_LENGTH: Ascii<&'static str> = Ascii::new("Content-Length");
+    }
+
+    let mut chunked_response = Response::builder();
+    for (h, v) in remove_hop_headers(original_resp.headers()).iter().filter(|(h, _)| CONTENT_LENGTH.as_ref() != h.as_str()) {
+        chunked_response.header(h, v);
+    }
+
+    Box::new(
+        original_resp
+            .into_body()
+            .concat2()
+            .from_err()
+            .and_then(move |entire_body| {
+                let chunks = entire_body
+                    .into_bytes()
+                    .chunks(max_chunk_size)
+                    .map(|part| String::from_utf8(part.to_vec()).unwrap())
+                    .collect::<Vec<_>>();
+
+                let stream = futures::stream::iter_ok::<_, ::std::io::Error>(chunks);
+                Ok(chunked_response.body(Body::wrap_stream(stream)).unwrap())
+            }),
+    )
 }

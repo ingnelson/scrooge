@@ -51,11 +51,6 @@ fn main() {
             process::exit(1);
         });
 
-    println!(
-        "Server running at http://{}:{} chunking responses at {}",
-        args.host, args.port, config.utf8_body_limit
-    );
-
     let upstream_url = Arc::new(config.upstream_url.clone());
     let http_client = Arc::new(HyperClient::builder().keep_alive(true).build_http::<Body>());
 
@@ -74,9 +69,20 @@ fn main() {
         })
     });
 
-    let server = Server::bind(&addr)
+    let server = Server::try_bind(&addr)
+        .unwrap_or_else(|why| {
+            eprintln!("Error: {}", why);
+            process::exit(1);
+        })
         .serve(proxy_service)
-        .map_err(|e| eprintln!("server error: {}", e));
+        .map_err(|why| {
+            eprintln!("Error: {}", why);
+            process::exit(1);
+        });
 
+    println!(
+        "Server running at http://{}:{} chunking responses at {}",
+        args.host, args.port, config.utf8_body_limit
+    );
     hyper::rt::run(server);
 }

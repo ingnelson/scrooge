@@ -5,6 +5,7 @@ use futures::{
 use hyper::{
     header::{HeaderMap, HeaderValue},
     Body, Client as HyperClient, Request, Response, StatusCode, Uri,
+    client::HttpConnector
 };
 use lazy_static::lazy_static;
 use std::{
@@ -28,12 +29,12 @@ impl Client {
         Self {
             forward_to,
             max_chunk_size,
-            ip,
+            ip
         }
     }
 }
 
-pub fn proxy_call(client: Arc<Client>, request: Request<Body>) -> BoxFut {
+pub fn proxy_call(http_client: Arc<HyperClient<HttpConnector>>, client: Arc<Client>, request: Request<Body>) -> BoxFut {
     let proxied_request = create_proxied_request(&client.forward_to, client.ip, request);
 
     info!(
@@ -42,8 +43,7 @@ pub fn proxy_call(client: Arc<Client>, request: Request<Body>) -> BoxFut {
     );
 
     let max_chunk_size = client.max_chunk_size;
-    let client = HyperClient::new();
-    let response = client.request(proxied_request).then(move |response| {
+    let response = http_client.request(proxied_request).then(move |response| {
         match response {
             Ok(response) => chunk_proxied_response(response, max_chunk_size),
             Err(error) => {

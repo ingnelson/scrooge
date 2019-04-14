@@ -7,11 +7,11 @@ use futures::prelude::*;
 use hyper::{
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
-    Body, Request, Server, Client as HyperClient
+    Body, Client as HyperClient, Request, Server,
 };
 use scrooge::{config::ProxyConfig, proxy_call, Client};
-use std::sync::Arc;
 use std::process;
+use std::sync::Arc;
 
 fn main() {
     pretty_env_logger::init();
@@ -32,16 +32,14 @@ fn main() {
     };
 
     let upstream_url = Arc::new(config.upstream_url().clone());
-    let http_client = Arc::new(HyperClient::builder()
-        .keep_alive(true)
-        .build_http::<Body>());
+    let http_client = Arc::new(HyperClient::builder().keep_alive(true).build_http::<Body>());
 
     let proxy_service = make_service_fn(move |socket: &AddrStream| {
         // every time a new socket connection is accepted!
         let client = Arc::new(Client::new(
             upstream_url.clone(),
             max_chunk_size,
-            socket.remote_addr().ip()
+            socket.remote_addr().ip(),
         ));
         let http_client = http_client.clone();
 

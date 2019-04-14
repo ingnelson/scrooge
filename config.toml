@@ -1,2 +1,2 @@
-upstream_url = "http://localhost:8888"
+upstream_url = "http://127.0.0.1:8888"
 utf8_body_limit = "1MB"

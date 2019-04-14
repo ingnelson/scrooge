@@ -3,15 +3,15 @@ use futures::{
     prelude::*,
 };
 use hyper::{
+    client::HttpConnector,
     header::{HeaderMap, HeaderValue},
     Body, Client as HyperClient, Request, Response, StatusCode, Uri,
-    client::HttpConnector
 };
 use lazy_static::lazy_static;
 use std::{
     net::IpAddr,
     str::{self, FromStr},
-    sync::Arc
+    sync::Arc,
 };
 use unicase::Ascii;
 
@@ -29,12 +29,16 @@ impl Client {
         Self {
             forward_to,
             max_chunk_size,
-            ip
+            ip,
         }
     }
 }
 
-pub fn proxy_call(http_client: Arc<HyperClient<HttpConnector>>, client: Arc<Client>, request: Request<Body>) -> BoxFut {
+pub fn proxy_call(
+    http_client: Arc<HyperClient<HttpConnector>>,
+    client: Arc<Client>,
+    request: Request<Body>,
+) -> BoxFut {
     let proxied_request = create_proxied_request(&client.forward_to, client.ip, request);
 
     info!(

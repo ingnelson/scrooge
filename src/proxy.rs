@@ -17,13 +17,13 @@ type BoxFut = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
 #[derive(Clone)]
 pub struct Client<'a> {
-    forward_to: &'a String,
+    forward_to: &'a str,
     max_chunk_size: usize,
     ip: IpAddr,
 }
 
 impl<'a> Client<'a> {
-    pub fn new(forward_to: &'a String, max_chunk_size: usize, ip: IpAddr) -> Self {
+    pub fn new(forward_to: &'a str, max_chunk_size: usize, ip: IpAddr) -> Self {
         Self {
             forward_to,
             max_chunk_size,

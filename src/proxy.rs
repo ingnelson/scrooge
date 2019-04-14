@@ -10,20 +10,21 @@ use lazy_static::lazy_static;
 use std::{
     net::IpAddr,
     str::{self, FromStr},
+    sync::Arc
 };
 use unicase::Ascii;
 
 type BoxFut = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
 #[derive(Clone)]
-pub struct Client<'a> {
-    forward_to: &'a str,
+pub struct Client {
+    forward_to: Arc<String>,
     max_chunk_size: usize,
     ip: IpAddr,
 }
 
-impl<'a> Client<'a> {
-    pub fn new(forward_to: &'a str, max_chunk_size: usize, ip: IpAddr) -> Self {
+impl Client {
+    pub fn new(forward_to: Arc<String>, max_chunk_size: usize, ip: IpAddr) -> Self {
         Self {
             forward_to,
             max_chunk_size,
@@ -32,8 +33,8 @@ impl<'a> Client<'a> {
     }
 }
 
-pub fn proxy_call(client: Client, request: Request<Body>) -> BoxFut {
-    let proxied_request = create_proxied_request(client.forward_to, client.ip, request);
+pub fn proxy_call(client: Arc<Client>, request: Request<Body>) -> BoxFut {
+    let proxied_request = create_proxied_request(&client.forward_to, client.ip, request);
 
     info!(
         "Processing request ClientIP({}) -> {}",
@@ -136,7 +137,7 @@ fn forward_uri<B>(forward_url: &str, req: &Request<B>) -> Uri {
 /// Transforms the upstream response in a chunked response.
 fn chunk_proxied_response(original_resp: Response<Body>, max_chunk_size: usize) -> BoxFut {
     lazy_static! {
-        static ref CONTENT_LENGTH: Ascii<&'static str> = Ascii::new("Content-Length");
+        static ref CONTENT_LENGTH: Ascii<&'static str> = Ascii::new("content-length");
     }
 
     let mut chunked_response = Response::builder();

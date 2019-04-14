@@ -1,5 +1,5 @@
 # Scrooge
-Scrooge is a server that proxy HTTP requests and stream the responses in chunks of a specific size.
+A server that proxy HTTP requests and stream the responses in chunks of a specific size.
 
 The implementation is based on [hyper_reverse_proxy](https://docs.rs/hyper-reverse-proxy/).
 

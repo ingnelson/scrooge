@@ -19,9 +19,9 @@ type BoxFut = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
 #[derive(Clone)]
 pub struct Client {
-    forward_to: Arc<String>,
-    max_chunk_size: usize,
-    ip: IpAddr,
+    pub forward_to: Arc<String>,
+    pub max_chunk_size: usize,
+    pub ip: IpAddr,
 }
 
 impl Client {
@@ -40,12 +40,6 @@ pub fn proxy_call(
     request: Request<Body>,
 ) -> BoxFut {
     let proxied_request = create_proxied_request(&client.forward_to, client.ip, request);
-
-    info!(
-        "Processing request ClientIP({}) -> {}",
-        client.ip, client.forward_to
-    );
-
     let max_chunk_size = client.max_chunk_size;
     let response = http_client.request(proxied_request).then(move |response| {
         match response {

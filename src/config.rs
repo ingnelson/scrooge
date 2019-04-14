@@ -4,8 +4,8 @@ use std::{error::Error, fmt};
 
 #[derive(Debug, Deserialize)]
 pub struct ProxyConfig {
-    upstream_url: String,
-    utf8_body_limit: String,
+    pub upstream_url: String,
+    pub utf8_body_limit: String,
 }
 
 impl ProxyConfig {
@@ -14,10 +14,6 @@ impl ProxyConfig {
             upstream_url,
             utf8_body_limit,
         }
-    }
-
-    pub fn upstream_url(&self) -> &String {
-        &self.upstream_url
     }
 
     pub fn max_chunk_size_in_bytes(&self) -> Result<usize, ScroogeError> {

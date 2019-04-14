@@ -17,7 +17,8 @@ fn main() {
     let addr = ([127, 0, 0, 1], 8080).into();
 
     lazy_static! {
-        static ref CONFIG: ProxyConfig = ProxyConfig::new(String::from("http://127.0.0.1:8888"), String::from("64KB"));
+        static ref CONFIG: ProxyConfig =
+            ProxyConfig::new(String::from("http://127.0.0.1:8888"), String::from("64KB"));
     }
 
     let max_chunk_size = match CONFIG.max_chunk_size_in_bytes() {

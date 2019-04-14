@@ -7,11 +7,11 @@ use hyper::{
     Body, Client as HyperClient, Request, Response, StatusCode, Uri,
 };
 use lazy_static::lazy_static;
-use unicase::Ascii;
 use std::{
     net::IpAddr,
     str::{self, FromStr},
 };
+use unicase::Ascii;
 
 type BoxFut = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
@@ -133,15 +133,17 @@ fn forward_uri<B>(forward_url: &str, req: &Request<B>) -> Uri {
     Uri::from_str(forward_uri.as_str()).unwrap()
 }
 
- /// Transforms the upstream response in a chunked response.
+/// Transforms the upstream response in a chunked response.
 fn chunk_proxied_response(original_resp: Response<Body>, max_chunk_size: usize) -> BoxFut {
-
     lazy_static! {
         static ref CONTENT_LENGTH: Ascii<&'static str> = Ascii::new("Content-Length");
     }
 
     let mut chunked_response = Response::builder();
-    for (h, v) in remove_hop_headers(original_resp.headers()).iter().filter(|(h, _)| CONTENT_LENGTH.as_ref() != h.as_str()) {
+    for (h, v) in remove_hop_headers(original_resp.headers())
+        .iter()
+        .filter(|(h, _)| CONTENT_LENGTH.as_ref() != h.as_str())
+    {
         chunked_response.header(h, v);
     }
 
